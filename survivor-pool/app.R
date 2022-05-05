@@ -28,6 +28,9 @@ mytheme <- function(){theme(axis.text = element_text(size = 10),
 mergeweek <- 6
 currentweek <- 7
 vect <- 1:currentweek
+winner <- "none"
+second <- "none"
+third <- "none"
 
 # Vector for Cast
 castaways <- c("Jenny","Lindsay", "Drea","Johnathan", "Chanelle",
@@ -53,6 +56,15 @@ eliminated <- tribble(~cast, ~week,
 picks <- picks %>%
     mutate(tot_remain = 5 - str_count(fullteam, 
                                       pattern = paste(eliminated$cast,collapse = "|")))
+# Popular Picks
+popular_picks <- as_tibble(unname(unlist(sapply(picks$fullteam, 
+                                                function(z) str_split(z, ","))))) %>%
+    group_by(value) %>%
+    rename(name = value) %>%
+    summarise(picks = n()) %>% 
+    arrange(picks) %>%
+    mutate(name = as_factor(name))
+
 # Scoring
 weekly_score <- function(x,y) {
     # Only the previously eliminated weeks considered
@@ -64,7 +76,7 @@ weekly_score <- function(x,y) {
     # How many picks remain for the week?
     new <- x %>% 
         mutate(epi_remain = 5 - str_count(fullteam, 
-                                          pattern = paste(nowelim, collapse = "|"))) 
+                                            pattern = paste(nowelim, collapse = "|"))) 
     
     if(y < mergeweek) {
         new$epi_score = new$epi_remain
@@ -72,7 +84,7 @@ weekly_score <- function(x,y) {
     else(new$epi_score = new$epi_remain*3)
     
     new %>%
-        rename_with(~paste0(.,y), epi_remain:epi_score)
+        rename_with(~paste0(.,y), epi_remain:epi_score) 
     
 }
 
@@ -100,6 +112,18 @@ ui <- fluidPage(
 
     # Application title
     titlePanel("Survivor Fantasy Tribes"),
+    br(),
+    p("Welcome to the new and improved site for keeping track of your Survivor pool
+      team. Until I get this site fully up and running I'll still keep track in 
+      the",
+      span(a("Google Doc.", href = "https://docs.google.com/spreadsheets/d/1ithAwr2YSLlWXf-hnNOYcTNgHYXdVFg1pXDV97YZsTI/edit?usp=sharing"), 
+           style ="color:blue"), style = "font-family: 'times'; font-si16pt"),
+    p("Please let me know of any suggestions you have or errors you see.",
+      style = "font-family: 'times'; font-si16pt"),
+    p("Remember:"),
+    div(img(src="jeff.gif", align = "center", height='250px',width='250px'),
+        style="text-align: center;"),
+
 
     # Sidebar with a slider input for week
     sidebarLayout(
@@ -112,14 +136,23 @@ ui <- fluidPage(
         ),
         mainPanel(
             h2("Score Board by Week (Current Week Default)"),
-            tableOutput("scoreboard"),
-            
+            div(tableOutput("scoreboard"), style = "font-size:80%"),
+            br(),
+            h3("A reminder of the scoring system:"),
+            p("- 1 point per castaway for each week they survive prior to the merge"),
+            p("- 3 points per castaway for each week they survive post-merge"),
+            p("- 10 bonus points if any of your picks comes in 3rd place"),
+            p("- 20 bonus points if any of your picks comes in 2nd place"),
+            p("- 30 bonus points if any of your picks is Sole Survivor"),
+            p("- 30, em(additional bonus) points if your MVP is Sole Survivor"),
+
+            br(),
             
             h2("The Most Popular Picks"),
             plotOutput("Popular")
             )
+        )
     )
-)
 
 # Define server logic
 server <- function(input, output, session) {
@@ -133,11 +166,25 @@ server <- function(input, output, session) {
     lapply(1:weekInput(), weekly_score, x = picks) %>%
     reduce(left_join) %>%
     rowwise() %>%
-    mutate(Score = as.integer(sum(c_across(starts_with("epi_score")))),
+    mutate(Score = sum(c_across(starts_with("epi_score"))),
            tot_remain = as.integer(tot_remain)) %>%
-    select(Name, Score, MVP, starts_with("Pick"), tot_remain) %>%
-    rename(`Remaining Survivors` = tot_remain) %>%
-    arrange(desc(Score))
+    ungroup() %>% # No longer rowwise
+    mutate(mvpbonus = ifelse(MVP == winner, 30, 0),
+           winneradd = if_else(str_detect(fullteam, 
+                                            pattern = winner),30,0),
+           secondadd = if_else(str_detect(fullteam, 
+                                   pattern = second),20,0),
+           thirdadd = if_else(str_detect(fullteam, 
+                                           pattern = third),10,0),
+           top3bonus = winneradd + secondadd + thirdadd) %>% 
+    mutate(Score = as.integer(Score + top3bonus + mvpbonus)) %>%
+    rename(`Remaining Survivors` = tot_remain,
+           `MVP Bonus` = mvpbonus,
+           `Top 3 Bonuses` = top3bonus) %>%
+    mutate(Place = dense_rank(desc(Score))) %>%
+    arrange(Place) %>% 
+    select(Place, Name, Score, MVP,
+           starts_with("Pick"), ends_with("bonus"), `Remaining Survivors`)
     })
     
     # Popular Picks Chart
