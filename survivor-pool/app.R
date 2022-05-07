@@ -26,7 +26,7 @@ mytheme <- function(){theme(axis.text = element_text(size = 10),
 
 # Merge Cutoff and current week (These can be radio buttons to adjust tables)
 mergeweek <- 6
-currentweek <- 7
+currentweek <- 8
 vect <- 1:currentweek
 winner <- "none"
 second <- "none"
@@ -50,7 +50,8 @@ eliminated <- tribble(~cast, ~week,
                       "Lydia", 5, 
                       "Chanelle", 6, # Jury Begins
                       "Rocksroy", 7,
-                      "Tori", 7) 
+                      "Tori", 7,
+                      "Hai", 8) 
 
 # Create Main Scoring Table ----
 picks <- picks %>%
@@ -118,7 +119,8 @@ ui <- fluidPage(
       the",
       span(a("Google Doc.", href = "https://docs.google.com/spreadsheets/d/1ithAwr2YSLlWXf-hnNOYcTNgHYXdVFg1pXDV97YZsTI/edit?usp=sharing"), 
            style ="color:blue"), style = "font-family: 'times'; font-si16pt"),
-    p("Please let me know of any suggestions you have or errors you see.",
+    p("Please let me know of any suggestions you have or errors you see. I'll be adding features both in terms
+      new content and design features",
       style = "font-family: 'times'; font-si16pt"),
     p("Remember:"),
     div(img(src="jeff.gif", align = "center", height='250px',width='250px'),

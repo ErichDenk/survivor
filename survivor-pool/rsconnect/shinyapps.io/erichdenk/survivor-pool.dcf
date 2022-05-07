@@ -1,0 +1,13 @@
+name: survivor-pool
+title:
+username:
+account: erichdenk
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 6255448
+bundleId: 5882007
+url: https://erichdenk.shinyapps.io/survivor-pool/
+when: 1651953357.34062
+lastSyncTime: 1651953357.34066
+asMultiple: FALSE
+asStatic: FALSE
