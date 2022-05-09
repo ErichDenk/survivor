@@ -11,7 +11,8 @@ rm(list = ls())
 ##########################################
 library(shiny)
 library(shinydashboard) # For dashboard functions
-library(shinythemes) # Easy prepackaged themes
+library(dashboardthemes) # Easy prepackaged themes
+library(fontawesome)
 library(formattable) # Formatting of table
 library(tidyverse)
 library(tidyselect) # For helper functions
@@ -123,56 +124,66 @@ popular <- ggplot(data = popular_picks, aes(fct_inorder(name),picks)) +
 # The Shiny Apps -----
 ######################
 
-# Define UI for application interactive table
-ui <- fluidPage(
-    
-    theme = shinytheme("slate"),
+# Define UI for application through built elements
+header <- dashboardHeader(title = "Survivor Fantasy Pool",
+                          titleWidth = 350)
 
-    # Application title
-    titlePanel("Survivor Fantasy Tribes"),
-    br(),
-    p("Welcome to the new and improved site for keeping track of your Survivor pool
+sidebar <- dashboardSidebar(
+  width = 350,
+  sidebarMenu(
+    menuItem("Welcome", tabName = "Welcome"),
+    menuItem("Scoreboard", tabName = "Scoreboard"),
+    menuItem("Rules", tabName = "Rules"),
+    menuItem("Stats", tabName = "Stats")
+    )
+  )
+
+body <- dashboardBody(
+  shinyDashboardThemes(
+    theme = "grey_dark"
+  ),
+  
+  # Tabbed Items
+  tabItems(
+    tabItem("Welcome",
+      p("Welcome to the new and improved site for keeping track of your Survivor pool
       team. Until I get this site fully up and running I'll still keep track in 
       the",
       span(a("Google Doc.", href = "https://docs.google.com/spreadsheets/d/1ithAwr2YSLlWXf-hnNOYcTNgHYXdVFg1pXDV97YZsTI/edit?usp=sharing"), 
-           style ="color:#00ab50"), style = "font-family: 'times'; font-si16pt"),
-    p("Please let me know of any suggestions you have or errors you see. I'll be adding features both in terms
+           style ="color:#00ab50"), style = "font-family: 'times'; font-si20pt"),
+      span("Please let me know of any suggestions you have or errors you see. I'll be adding features both in terms
       new content and design features",
-      style = "font-family: 'times'; font-si16pt"),
-    p("Remember:"),
-    div(img(src="jeff.gif", align = "center", height='250px',width='250px'),
-        style="text-align: center;"),
-
-
-    # Sidebar with a slider input for week
-    sidebarLayout(
-        sidebarPanel(
-            numericInput("week",
-                        "Standings after week:",
-                        currentweek,
-                        min = 1,
-                        max = currentweek)
-        ),
-        mainPanel(
-            h2("Score Board by Week (Current Week Default)"),
-            div(formattableOutput("scoreboard"), style = "font-size:80%"),
-            br(),
-            h3("A reminder of the scoring system:"),
-            p("- 1 point per castaway for each week they survive prior to the merge"),
-            p("- 3 points per castaway for each week they survive post-merge"),
-            p("- 10 bonus points if any of your picks comes in 3rd place"),
-            p("- 20 bonus points if any of your picks comes in 2nd place"),
-            p("- 30 bonus points if any of your picks is Sole Survivor"),
-            p("- 30, em(additional bonus) points if your MVP is Sole Survivor"),
-
-            br(),
-            
-            h2("The Most Popular Picks"),
-            plotOutput("Popular")
-            )
-        )
+      style = "font-family: 'times'; font-si20pt"),
+      p("Remember:"),
+      div(img(src="jeff.gif", align = "center", height='350px',width='350px'),
+          style="text-align: center;")
+      ),
+    
+    tabItem("Scoreboard",
+        h2("Score Board by Week"),
+        sliderInput("week", "Week:", 1, currentweek, currentweek),
+        formattableOutput("scoreboard")
+      ),
+    
+    tabItem("Rules",
+      h2("A reminder of the scoring system:"),
+      p("- 1 point per castaway for each week they survive prior to the merge"),
+      p("- 3 points per castaway for each week they survive post-merge"),
+      p("- 10 bonus points if any of your picks comes in 3rd place"),
+      p("- 20 bonus points if any of your picks comes in 2nd place"),
+      p("- 30 bonus points if any of your picks is Sole Survivor"),
+      p("- 30, em(additional bonus) points if your MVP is Sole Survivor")
+      ),
+    
+    tabItem("Stats",
+      h2("The Most Popular Picks"),
+      plotOutput("Popular")
+      )
     )
+  )
 
+ui <- dashboardPage(header, sidebar, body)
+  
 # Define server logic
 server <- function(input, output, session) {
     
