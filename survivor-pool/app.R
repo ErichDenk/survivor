@@ -1,22 +1,25 @@
 # Shiny App for scoring and displaying our pool
 # 
-#
 #    http://shiny.rstudio.com/
 #
 
+gc()
 rm(list = ls())
 
 ##########################################
 # Packages, Themes, and Functions -------
 ##########################################
 library(shiny)
+library(shinydashboard) # For dashboard functions
+library(shinythemes) # Easy prepackaged themes
+library(formattable) # Formatting of table
 library(tidyverse)
-library(tidyselect)
-library(markdown)
-library(forcats)
-library(shinythemes)
-library(formattable)
+library(tidyselect) # For helper functions
+library(markdown) 
+library(forcats) # Easily deal with factors
 
+
+# GGPlot uniform theme
 mytheme <- function(){theme(axis.text = element_text(size = 10),
                             plot.title = element_text(face = "bold"),
                             panel.background = element_blank(),
@@ -27,6 +30,7 @@ mytheme <- function(){theme(axis.text = element_text(size = 10),
                                                               size = 0.5, color = "gray"),
                             axis.line.x = element_line(linetype = "solid"))}
 
+# Globals:
 # Merge Cutoff and current week (These can be radio buttons to adjust tables)
 mergeweek <- 6
 currentweek <- 8
@@ -63,12 +67,10 @@ weekly_score <- function(x,y) {
   
 }
 
-# Formatting Function
+# Formatting Function for multi-column formatting
 elimformatter <-  
   formatter("span", style = x ~ style(color = ifelse(x %in% eliminated$cast, "red", "#358bbd"),
                                       "text-decoration" = ifelse(x %in% eliminated$cast, "line-through",NA)))
-
-
 
 ###################
 # Data Input ------
@@ -90,7 +92,7 @@ eliminated <- tribble(~cast, ~week,
                       "Tori", 7,
                       "Hai", 8) 
 
-# Create Main Scoring Table ----
+# Create Main Scoring Table
 picks <- picks %>%
     mutate(tot_remain = 5 - str_count(fullteam, 
                                       pattern = paste(eliminated$cast,collapse = "|")))
@@ -124,7 +126,7 @@ popular <- ggplot(data = popular_picks, aes(fct_inorder(name),picks)) +
 # Define UI for application interactive table
 ui <- fluidPage(
     
-    theme = shinytheme("darkly"),
+    theme = shinytheme("slate"),
 
     # Application title
     titlePanel("Survivor Fantasy Tribes"),
@@ -203,10 +205,12 @@ server <- function(input, output, session) {
     select(Place, Name, Score, MVP,
            starts_with("Pick"), ends_with("bonus"), `Remaining Survivors`) %>%
     formattable(list(MVP = elimformatter,
-                                       Pick2 = elimformatter,
-                                       Pick3 = elimformatter,
-                                       Pick4 = elimformatter,
-                                       Pick5 = elimformatter))
+                     Pick2 = elimformatter,
+                     Pick3 = elimformatter,
+                     Pick4 = elimformatter,
+                     Pick5 = elimformatter,
+                     Name = formatter("span", style = x ~ style(font.style = "italic")),
+                     Place = formatter("span", style = x ~ style(font.style = "bold"))))
       
     })
     
