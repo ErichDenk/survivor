@@ -6,13 +6,16 @@
 
 rm(list = ls())
 
+##########################################
 # Packages, Themes, and Functions -------
+##########################################
 library(shiny)
 library(tidyverse)
 library(tidyselect)
 library(markdown)
 library(forcats)
 library(shinythemes)
+library(formattable)
 
 mytheme <- function(){theme(axis.text = element_text(size = 10),
                             plot.title = element_text(face = "bold"),
@@ -36,6 +39,40 @@ third <- "none"
 castaways <- c("Jenny","Lindsay", "Drea","Johnathan", "Chanelle",
                "Hai","Maryanne","Mike","Omar","Swati","Tori", "Daniel",
                "Rocksroy", "Romeo","Lydia","Marya S","Jackson","Zach")
+
+# Scoring Function
+weekly_score <- function(x,y) {
+  # Only the previously eliminated weeks considered
+  nowelim <- eliminated %>%
+    filter(week <= y) %>%
+    select(cast) %>%
+    .$cast
+  
+  # How many picks remain for the week?
+  new <- x %>% 
+    mutate(epi_remain = 5 - str_count(fullteam, 
+                                      pattern = paste(nowelim, collapse = "|"))) 
+  
+  if(y < mergeweek) {
+    new$epi_score = new$epi_remain
+  }
+  else(new$epi_score = new$epi_remain*3)
+  
+  new %>%
+    rename_with(~paste0(.,y), epi_remain:epi_score) 
+  
+}
+
+# Formatting Function
+elimformatter <-  
+  formatter("span", style = x ~ style(color = ifelse(x %in% eliminated$cast, "red", "#358bbd"),
+                                      "text-decoration" = ifelse(x %in% eliminated$cast, "line-through",NA)))
+
+
+
+###################
+# Data Input ------
+###################
 
 # Our Selections
 picks <- read_csv("picks.csv") %>%
@@ -66,28 +103,6 @@ popular_picks <- as_tibble(unname(unlist(sapply(picks$fullteam,
     arrange(picks) %>%
     mutate(name = as_factor(name))
 
-# Scoring
-weekly_score <- function(x,y) {
-    # Only the previously eliminated weeks considered
-    nowelim <- eliminated %>%
-        filter(week <= y) %>%
-        select(cast) %>%
-        .$cast
-    
-    # How many picks remain for the week?
-    new <- x %>% 
-        mutate(epi_remain = 5 - str_count(fullteam, 
-                                            pattern = paste(nowelim, collapse = "|"))) 
-    
-    if(y < mergeweek) {
-        new$epi_score = new$epi_remain
-    }
-    else(new$epi_score = new$epi_remain*3)
-    
-    new %>%
-        rename_with(~paste0(.,y), epi_remain:epi_score) 
-    
-}
 
 #####################
 # PLOTS ------------
@@ -118,7 +133,7 @@ ui <- fluidPage(
       team. Until I get this site fully up and running I'll still keep track in 
       the",
       span(a("Google Doc.", href = "https://docs.google.com/spreadsheets/d/1ithAwr2YSLlWXf-hnNOYcTNgHYXdVFg1pXDV97YZsTI/edit?usp=sharing"), 
-           style ="color:blue"), style = "font-family: 'times'; font-si16pt"),
+           style ="color:#00ab50"), style = "font-family: 'times'; font-si16pt"),
     p("Please let me know of any suggestions you have or errors you see. I'll be adding features both in terms
       new content and design features",
       style = "font-family: 'times'; font-si16pt"),
@@ -138,7 +153,7 @@ ui <- fluidPage(
         ),
         mainPanel(
             h2("Score Board by Week (Current Week Default)"),
-            div(tableOutput("scoreboard"), style = "font-size:80%"),
+            div(formattableOutput("scoreboard"), style = "font-size:80%"),
             br(),
             h3("A reminder of the scoring system:"),
             p("- 1 point per castaway for each week they survive prior to the merge"),
@@ -164,7 +179,7 @@ server <- function(input, output, session) {
     })
     
     # Main Scoreboard
-    output$scoreboard <- renderTable({
+    output$scoreboard <- renderFormattable({
     lapply(1:weekInput(), weekly_score, x = picks) %>%
     reduce(left_join) %>%
     rowwise() %>%
@@ -186,7 +201,13 @@ server <- function(input, output, session) {
     mutate(Place = dense_rank(desc(Score))) %>%
     arrange(Place) %>% 
     select(Place, Name, Score, MVP,
-           starts_with("Pick"), ends_with("bonus"), `Remaining Survivors`)
+           starts_with("Pick"), ends_with("bonus"), `Remaining Survivors`) %>%
+    formattable(list(MVP = elimformatter,
+                                       Pick2 = elimformatter,
+                                       Pick3 = elimformatter,
+                                       Pick4 = elimformatter,
+                                       Pick5 = elimformatter))
+      
     })
     
     # Popular Picks Chart
