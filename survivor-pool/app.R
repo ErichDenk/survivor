@@ -193,7 +193,7 @@ body <- dashboardBody(
       p("- 10 bonus points if any of your picks comes in 3rd place"),
       p("- 20 bonus points if any of your picks comes in 2nd place"),
       p("- 30 bonus points if any of your picks is Sole Survivor"),
-      p("- 30, em(additional bonus) points if your MVP is Sole Survivor")
+      p("- 30 additional bonus points if your MVP is Sole Survivor")
       ),
     
     tabItem("Stats",
