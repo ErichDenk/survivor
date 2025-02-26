@@ -23,7 +23,7 @@ library(assertr)
 
 # Google Sheet Info
 gs4_deauth()
-sheet_id <- "1MM3r3p9PxthirnMfZvWfBg3LsNm7Uf1X99BVM0fdvH0"
+sheet_id <- "1qx3OYAEe1ajKpjsdxMrWPxbC-7N-ANJ4gUH1Bfk__Vw"
 
 # GGPlot uniform theme
 mytheme <- function(){
@@ -48,16 +48,14 @@ mytheme <- function(){
 # Globals:
 # Merge Cutoff and Winners (These can be radio buttons to adjust tables)
 mergeweek <- 6
-winner <- "none"
-second <- "none"
-third <- "none"
+winner <- "Rachel"
+second <- "Sam"
+third <- "Sue"
 
 # Vector for Cast
-castaways <- c("Austin", "Dee", "Brandon", "Emily", 
-               "Brando", "Hannah", "Bruce", "Janani", 
-               "Drew", "Julie", "Jake", "Katurah", 
-               "Kaleb", "Kellie", "Sifu", "Kendra",
-               "Sean", "Sabiyah")
+castaways <- c("Jon","Andy", "Anika", "Gabe", "Genevieve", "Rome", 
+               "TK", "Teeny", "Aysha", "Caroline", "Kishan", "Kyle",
+               "Rachel","Sam", "Sierra", "Sol", "Sue", "Tiyana")
 
 # Scoring Function
 weekly_score <- function(x,y) {
@@ -170,7 +168,7 @@ body <- dashboardBody(
       p("Welcome to the new and improved site for keeping track of your Survivor pool
       team. Until I get this site fully up and running I'll still keep track in 
       the",
-      span(a("Google Doc.", href = "https://docs.google.com/spreadsheets/d/1MM3r3p9PxthirnMfZvWfBg3LsNm7Uf1X99BVM0fdvH0/edit?usp=sharing"), 
+      span(a("Google Doc.", href = "https://docs.google.com/spreadsheets/d/1-IqNx3Pb4GPlmRNYonsTcwzHepOGq-LF87mOkLsnlAs/edit"), 
            style ="color:#00ab50"), style = "font-family: 'times'; font-si20pt"),
       span("Please let me know of any suggestions you have or errors you see. I'll be adding features both in terms
       new content and design features",
