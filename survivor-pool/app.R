@@ -23,7 +23,7 @@ library(assertr)
 
 # Google Sheet Info
 gs4_deauth()
-sheet_id <- "1qx3OYAEe1ajKpjsdxMrWPxbC-7N-ANJ4gUH1Bfk__Vw"
+sheet_id <- "1_UoQ5j942Ehxad4JlaAoDApDCmMXyge3Q3Y3dKhob-Q"
 
 
 # GGPlot uniform theme
@@ -50,14 +50,15 @@ mytheme <- function(){
 # Merge Cutoff and Winners (These can be radio buttons to adjust tables)
 mergeweek <- 6
 
-winner <- "Rachel"
-second <- "Sam"
-third <- "Sue"
+winner <- "Placeholder"
+second <- "Placeholder"
+third <- "Placeholder"
+
+tribes <- read_sheet(sheet_id, sheet = "Tribes") 
 
 # Vector for Cast
-castaways <- c("Jon","Andy", "Anika", "Gabe", "Genevieve", "Rome", 
-               "TK", "Teeny", "Aysha", "Caroline", "Kishan", "Kyle",
-               "Rachel","Sam", "Sierra", "Sol", "Sue", "Tiyana")
+castaways <- tribes %>%
+  pull(cast)
 
 # Scoring Function
 weekly_score <- function(x,y) {
@@ -121,17 +122,20 @@ popular_picks <- picks %>%
   group_by(cast) %>%
   summarize(Other_picks = n()) %>%
   ungroup() %>%
-  full_join(.,mvps, by = c("cast" = "MVP")) %>%
+  tidylog::full_join(.,mvps, by = c("cast" = "MVP")) %>%
+  # Add tribes and colors
+  tidylog::left_join(tribes, by = c("cast")) %>%
   replace_na(list(MVP_picks = 0)) %>%
   mutate(cast = as_factor(cast), 
-         Total_picks = MVP_picks + Other_picks) %>%
+         Total = MVP_picks + Other_picks) %>%
   pivot_longer(cols = ends_with("picks"), 
                names_to = "type", 
                values_to = "Val") %>%
-  arrange(desc(Val)) %>%
+  arrange(desc(Total), cast) %>%
   mutate(cast = fct_reorder(cast, Val), 
-         type = str_remove(type, "_picks")) %>%
-  filter(type != "Total")
+         type = str_remove(type, "_picks"))
+
+
 
 #####################
 # PLOTS ------------
@@ -140,6 +144,19 @@ popular <- ggplot(data = popular_picks, aes(x = cast, y = Val, fill = type)) +
   geom_bar(stat="identity", position = "stack", alpha = .6) +
   scale_y_continuous(breaks = 1:20) +
   scale_fill_manual(values = c("#358bbd", "#00ab50")) +
+  coord_flip() +
+  mytheme()
+
+bytribe <- popular_picks %>%
+  group_by(tribe, color) %>%
+  summarize(Total = sum(Total)) %>%
+  ungroup() %>%
+  arrange(desc(Total)) %>%
+  ggplot(aes(x = tribe, y = Total, fill = tribe)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("#804d9a", "#ffb14a", "#a8ec9b"), 
+                    breaks = c("Lagi", "Civa", "Vula")) +
+  theme(legend.position = element_blank()) +
   coord_flip() +
   mytheme()
 
@@ -168,11 +185,10 @@ body <- dashboardBody(
   tabItems(
     tabItem("Welcome",
             p("Welcome to the new and improved site for keeping track of your Survivor pool
-      team. Until I get this site fully up and running I'll still keep track in 
-      the",
-      span(a("Google Doc.", href = "https://docs.google.com/spreadsheets/d/1-IqNx3Pb4GPlmRNYonsTcwzHepOGq-LF87mOkLsnlAs/edit"), 
+      team. If you have the time or interest in improving the site, feel free to open a",
+      span(a("pull request.", href = "https://github.com/ErichDenk/survivor"), 
            style ="color:#00ab50"), style = "font-family: 'times'; font-si20pt"),
-      span("Please let me know of any suggestions you have or errors you see. I'll be adding features both in terms
+      span("As always, let me know of any suggestions you have or errors you see. I'll be adding features both in terms
       new content and design features",
       style = "font-family: 'times'; font-si20pt"),
       p("Remember:"),
@@ -198,7 +214,11 @@ body <- dashboardBody(
     
     tabItem("Stats",
             h2("The Most Popular Picks"),
-            plotOutput("Popular")
+            plotOutput("Popular"),
+            # Add space
+            br(),
+            h2("Picks by Tribe"),
+            plotOutput("ByTribe")
     )
   )
 )
@@ -248,6 +268,8 @@ server <- function(input, output, session) {
   
   # Popular Picks Chart
   output$Popular <- renderPlot(popular)
+  # By Tribe
+  output$ByTribe <- renderPlot(bytribe)
 }
 
 # Run the application 
