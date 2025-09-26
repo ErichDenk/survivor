@@ -3,9 +3,6 @@
 #    http://shiny.rstudio.com/
 #
 
-gc()
-rm(list = ls())
-
 ##########################################
 # Packages, Themes, and Functions -------
 ##########################################
@@ -50,9 +47,9 @@ mytheme <- function(){
 # Merge Cutoff and Winners (These can be radio buttons to adjust tables)
 mergeweek <- 6
 
-winner <- "Placeholder"
-second <- "Placeholder"
-third <- "Placeholder"
+winner <- "Kyle"
+second <- "Eva"
+third <- "Joe"
 
 tribes <- read_sheet(sheet_id, sheet = "Tribes") 
 
@@ -140,13 +137,14 @@ popular_picks <- picks %>%
 #####################
 # PLOTS ------------
 ####################
+# Picks by MVP, General Tribe
 popular <- ggplot(data = popular_picks, aes(x = cast, y = Val, fill = type)) +
   geom_bar(stat="identity", position = "stack", alpha = .6) +
-  scale_y_continuous(breaks = 1:20) +
   scale_fill_manual(values = c("#358bbd", "#00ab50")) +
   coord_flip() +
   mytheme()
 
+# Picks by Tribe
 bytribe <- popular_picks %>%
   group_by(tribe, color) %>%
   summarize(Total = sum(Total)) %>%
@@ -179,7 +177,7 @@ sidebar <- dashboardSidebar(
 )
 
 body <- dashboardBody(
-  theme = bs_theme(bootswatch = "darkly"),
+  theme = bs_theme(bootswatch = "superhero"),
   
   # Tabbed Items
   tabItems(
