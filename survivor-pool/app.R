@@ -125,10 +125,49 @@ tribe_badge <- function(color_vec) {
 }
 
 # ---- (Optional) Popular / ByTribe plotting objects ----
-# If you already have code to create 'popular' and 'bytribe' ggplots, paste it here.
-# For now, create simple placeholders so app runs:
-popular <- ggplot() + geom_blank() + ggtitle("Popular picks (placeholder)")
-bytribe <- ggplot() + geom_blank() + ggtitle("Picks by tribe (placeholder)")
+mvps <- picks %>% 
+  group_by(MVP) %>%
+  summarize(MVP_picks = n()) %>%
+  ungroup() %>%
+  filter(MVP_picks > 0)
+
+popular_picks <- picks %>%
+  pivot_longer(cols = starts_with("Pick"),
+               values_to = "cast") %>%
+  group_by(cast) %>%
+  summarize(Other_picks = n()) %>%
+  ungroup() %>%
+  tidylog::full_join(.,mvps, by = c("cast" = "MVP")) %>%
+  # Add tribes and colors
+  tidylog::left_join(tribes, by = c("cast")) %>%
+  replace_na(list(MVP_picks = 0)) %>%
+  mutate(cast = as_factor(cast), 
+         Total = MVP_picks + Other_picks) %>%
+  pivot_longer(cols = ends_with("picks"), 
+               names_to = "type", 
+               values_to = "Val") %>%
+  arrange(desc(Total), cast) %>%
+  mutate(cast = fct_reorder(cast, Val), 
+         type = str_remove(type, "_picks"))
+
+popular <- ggplot(data = popular_picks, aes(x = cast, y = Val, fill = type)) +
+  geom_bar(stat="identity", position = "stack", alpha = .6) +
+  scale_fill_manual(values = c("#0e3056", "#195432")) +
+  coord_flip() +
+  mytheme()
+
+bytribe <- popular_picks %>%
+  group_by(tribe, color) %>%
+  summarize(Total = sum(Total)) %>%
+  ungroup() %>%
+  arrange(desc(Total)) %>%
+  ggplot(aes(x = tribe, y = Total, fill = tribe)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("#4892b4", "#dcca19", "#d65367"), 
+                    breaks = c("Kele", "Hina", "Uli")) +
+  theme(legend.position = element_blank()) +
+  coord_flip() +
+  mytheme()
 
 # ---- UI ----
 ui <- dashboardPage(
@@ -222,7 +261,7 @@ server <- function(input, output, session) {
   # Leaderboard value boxes (safe: handle missing rows)
   output$leader <- renderValueBox({
     df <- scoreboard_data()
-    if (nrow(df) == 0 || !any(df$Place == 1)) {
+    if (nrow(df) == 0 || !any(df$Place == 1) || all(df$Place) == 1) {
       valueBox("—", "No leader", icon = icon("crown"), color = "aqua")
     } else {
       row <- df %>% filter(Place == 1) %>% slice(1)
