@@ -4,7 +4,7 @@
 ##########################################
 # Packages, Themes, and Functions -------
 ##########################################
-library(shiny)
+#library(shiny)
 library(shinydashboard) # For dashboard functions
 library(bslib) # Easy prepackaged themes (optional)
 library(fontawesome)
@@ -17,7 +17,7 @@ library(googlesheets4)
 library(assertr)
 
 # ---- Google Sheet Info ----
-# Replace with your sheet id (you already had one)
+gs4_deauth()
 sheet_id <- "1WFD5SAMUbJO40HbMj3TtjDCWgVbdxw0ftDgmVbhHIb4"
 
 # ---- Read Sheets (must exist in your Google Sheet) ----
@@ -58,9 +58,9 @@ mergeweek <- 6
 currentweek <- ifelse(nrow(eliminated) > 0, max(eliminated$week, na.rm = TRUE), 1)
 
 # placeholder winners (you can set these in your Eliminated sheet and derive later)
-winner <- "winner"
-second <- "second"
-third <- "third"
+winner <- "Savannah"
+second <- "Sophi B"
+third <- "Sage"
 
 # Vector for Cast (from tribes)
 castaways <- tribes %>% pull(cast)
@@ -219,7 +219,7 @@ server <- function(input, output, session) {
     
     df <- df %>%
       rowwise() %>%
-      mutate(Score = sum(c_across(starts_with("epi_score"))),
+      mutate(EpiScore = sum(c_across(starts_with("epi_score"))),
              tot_remain = as.integer(5 - str_count(as.vector(paste(MVP, Pick2, Pick3, Pick4, Pick5, sep=",")),
                                                    pattern = paste(eliminated$cast, collapse = "|")))) %>%
       ungroup() %>% 
@@ -228,8 +228,9 @@ server <- function(input, output, session) {
              secondadd = if_else(str_detect(fullteam, pattern = second), 20, 0),
              thirdadd = if_else(str_detect(fullteam, pattern = third), 10, 0),
              top3bonus = winneradd + secondadd + thirdadd) %>% 
-      mutate(Score = as.integer(Score + top3bonus + mvpbonus)) %>%
+      mutate(Score = as.integer(EpiScore + top3bonus + mvpbonus)) %>%
       rename(`Remaining Survivors` = tot_remain,
+             `Running Score Total` = EpiScore,
              `MVP Bonus` = mvpbonus,
              `Top 3 Bonuses` = top3bonus) %>%
       mutate(Place = dense_rank(desc(Score))) %>%
@@ -247,21 +248,33 @@ server <- function(input, output, session) {
     if (nrow(df) == 0) return(formattable(data.frame()))
     
     df %>%
-      select(Place, Contestant, Score, MVP, starts_with("Pick"), ends_with("bonus"), `Remaining Survivors`) %>%
+      select(Place, Contestant, Score, MVP, starts_with("Pick"),`Running Score Total`,`MVP Bonus`, `Top 3 Bonuses`, `Remaining Survivors`) %>%
       formattable(list(
-        MVP   = tribe_badge(tribe_colors),
-        Pick2 = tribe_badge(tribe_colors),
-        Pick3 = tribe_badge(tribe_colors),
-        Pick4 = tribe_badge(tribe_colors),
-        Pick5 = tribe_badge(tribe_colors),
-        Place = formatter("span", style = x ~ style("font-weight" = "bold"))
-      ))
+  MVP = formatter(
+    "span",
+    style = x ~ style(
+      display = "inline-block",
+      padding = "2px 6px",
+      "border-radius" = "8px",
+      "background-color" = ifelse(x %in% names(tribe_colors), tribe_colors[x], "#d9d9d9"),
+      color = ifelse(x %in% eliminated$cast, "gray", "white"),
+      "text-decoration" = ifelse(x %in% eliminated$cast, "line-through", "none"),
+      "font-weight" = "bold"
+    )
+  ),
+  Pick2 = elimformatter,
+  Pick3 = elimformatter,
+  Pick4 = elimformatter,
+  Pick5 = elimformatter,
+  Place = formatter("span", style = x ~ style("font-weight" = "bold"))
+))
+
   })
   
   # Leaderboard value boxes (safe: handle missing rows)
   output$leader <- renderValueBox({
     df <- scoreboard_data()
-    if (nrow(df) == 0 || !any(df$Place == 1) || all(df$Place) == 1) {
+    if (nrow(df) == 0 || !any(df$Place == 1)) {
       valueBox("—", "No leader", icon = icon("crown"), color = "aqua")
     } else {
       row <- df %>% filter(Place == 1) %>% slice(1)
