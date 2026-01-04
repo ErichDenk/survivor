@@ -5,7 +5,7 @@ account: erichdenk
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 6255448
-bundleId: 10356012
+bundleId: 10980835
 url: https://erichdenk.shinyapps.io/survivor-pool/
 asMultiple: FALSE
 asStatic: FALSE
