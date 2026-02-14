@@ -61,43 +61,120 @@ if(nrow(finale) > 0) {
 
 # Idols sheet is optional - only check if it exists and has data
 if(nrow(idols) > 0) {
-  stopifnot("Idols sheet must contain columns: cast, week_found" = 
+  stopifnot("Idols sheet must contain columns: cast, week_found" =
               all(c("cast","week_found") %in% names(idols)))
+}
+
+# ---- Data Validation Function ----
+validate_sheets_data <- function(tribes, picks, eliminated, finale, idols) {
+  issues <- list()
+
+  # Tribes validation
+  if(!all(c("cast","color","tribe") %in% names(tribes))) {
+    issues <- append(issues, "Tribes sheet missing required columns: cast, tribe, color")
+  }
+  if(any(is.na(tribes$cast))) {
+    issues <- append(issues, paste("Tribes sheet has", sum(is.na(tribes$cast)), "missing cast names"))
+  }
+  if(any(duplicated(tribes$cast))) {
+    issues <- append(issues, paste("Tribes sheet has duplicate cast names:",
+                                   paste(tribes$cast[duplicated(tribes$cast)], collapse=", ")))
+  }
+
+  # Picks validation
+  required_pick_cols <- c("Contestant", "MVP", "Pick2", "Pick3", "Pick4", "Pick5")
+  if(!all(required_pick_cols %in% names(picks))) {
+    issues <- append(issues, "Picks sheet missing required columns")
+  }
+  if(any(duplicated(picks$Contestant))) {
+    issues <- append(issues, "Picks sheet has duplicate contestants")
+  }
+
+  # Eliminated validation
+  if(!all(c("cast","week") %in% names(eliminated))) {
+    issues <- append(issues, "Eliminated sheet missing required columns: cast, week")
+  }
+  if(nrow(eliminated) > 0 && any(!is.na(eliminated$week) & !is.numeric(eliminated$week))) {
+    issues <- append(issues, "Eliminated sheet has non-numeric week values")
+  }
+  if(any(duplicated(eliminated$cast))) {
+    issues <- append(issues, paste("Eliminated sheet has duplicate entries:",
+                                   paste(eliminated$cast[duplicated(eliminated$cast)], collapse=", ")))
+  }
+
+  # Finale validation (if exists)
+  if(nrow(finale) > 0) {
+    if(!all(c("cast","finish") %in% names(finale))) {
+      issues <- append(issues, "Finale sheet missing required columns: cast, finish")
+    }
+    valid_finishes <- c("winner", "second", "third")
+    if(any(!finale$finish %in% valid_finishes)) {
+      issues <- append(issues, "Finale sheet has invalid finish values (use: winner, second, third)")
+    }
+  }
+
+  # Idols validation (if exists)
+  if(nrow(idols) > 0) {
+    if(!all(c("cast","week_found") %in% names(idols))) {
+      issues <- append(issues, "Idols sheet missing required columns: cast, week_found")
+    }
+    if(any(!is.na(idols$week_found) & !is.numeric(idols$week_found))) {
+      issues <- append(issues, "Idols sheet has non-numeric week_found values")
+    }
+  }
+
+  # Cross-sheet consistency validation
+  all_picks <- unique(c(picks$MVP, picks$Pick2, picks$Pick3, picks$Pick4, picks$Pick5))
+  unknown_picks <- setdiff(all_picks, tribes$cast)
+  if(length(unknown_picks) > 0) {
+    issues <- append(issues, paste("Picks reference unknown castaways:",
+                                   paste(unknown_picks, collapse=", ")))
+  }
+
+  if(nrow(eliminated) > 0) {
+    unknown_elim <- setdiff(eliminated$cast, tribes$cast)
+    if(length(unknown_elim) > 0) {
+      issues <- append(issues, paste("Eliminated sheet references unknown castaways:",
+                                     paste(unknown_elim, collapse=", ")))
+    }
+  }
+
+  return(issues)
 }
 
 # ---- GGPlot uniform theme ----
 mytheme <- function(){
   ggthemes::theme_tufte() +
     theme(
-      # Lighter dark background - modern charcoal
-      plot.background = element_rect(fill = "#2a2e3d", color = NA),
-      panel.background = element_rect(fill = "#323745", color = NA),
+      # Clean light backgrounds
+      plot.background = element_rect(fill = "#ffffff", color = NA),
+      panel.background = element_rect(fill = "#f8f9fa", color = NA),
       
-      # Grid lines - subtle blue-gray
+      # Subtle grid lines
       panel.grid.major.x = element_blank(),
       panel.grid.minor.x = element_blank(),
       panel.grid.minor.y = element_blank(),
       panel.grid.major.y = element_line(linetype = "dotted",
-                                        size = 0.5, color = "#4a5566"), 
+                                        size = 0.5, color = "#dee2e6"), 
       
-      # Axis styling - modern blue accent
-      axis.line.x = element_line(linetype = "solid", color = "#4a90a4", size = 1),
+      # Axis styling - clean and modern
+      axis.line.x = element_line(linetype = "solid", color = "#495057", size = 1),
       axis.title.x = element_blank(),
       axis.title.y = element_blank(),
-      axis.text.y = element_text(face = "bold", color = "#e8eef2", size = 10),
-      axis.text.x = element_text(color = "#d4dce3", size = 10),
-      axis.text = element_text(size = 10, color = "#d4dce3"),
+      axis.text.y = element_text(face = "bold", color = "#212529", size = 10),
+      axis.text.x = element_text(color = "#495057", size = 10),
+      axis.text = element_text(size = 10, color = "#495057"),
       
-      # Title styling
-      plot.title = element_text(face = "bold", color = "#6db8d4", size = 14,
+      # Title styling - bold and readable
+      plot.title = element_text(face = "bold", color = "#212529", size = 14,
                                 family = "sans"),
       
       # Legend styling
       legend.position = "bottom",
       legend.title = element_blank(),
-      legend.background = element_rect(fill = "#2a2e3d", color = "#4a5566"),
-      legend.text = element_text(color = "#e8eef2", size = 9),
-      legend.key = element_rect(fill = "#323745")
+      legend.background = element_rect(fill = "#ffffff", color = NA),
+      legend.text = element_text(color = "#212529", size = 9),
+      legend.key = element_rect(fill = "#f8f9fa")
     )
 }
 
@@ -235,8 +312,8 @@ popular_picks <- picks %>%
          type = str_remove(type, "_picks"))
 
 popular <- ggplot(data = popular_picks, aes(x = cast, y = Val, fill = type)) +
-  geom_bar(stat="identity", position = "stack", alpha = .6) +
-  scale_fill_manual(values = c("#0e3056", "#195432")) +
+  geom_bar(stat="identity", position = "stack", alpha = .85) +
+  scale_fill_manual(values = c("#2563eb", "#059669")) +  # Modern blue and green
   coord_flip() +
   mytheme()
 
@@ -259,7 +336,7 @@ bytribe <- popular_picks %>%
 ui <- dashboardPage(
   dashboardHeader(title = "Survivor Pool"),
   dashboardSidebar(
-    sidebarMenu(
+    sidebarMenu(id = "tabs",
       menuItem("Scoreboard", tabName = "Scoreboard", icon = icon("table")),
       menuItem("Visuals", tabName = "Visuals", icon = icon("chart-line")),
       menuItem("Pick Performance", tabName = "PickPerformance", icon = icon("star")),
@@ -268,227 +345,232 @@ ui <- dashboardPage(
     )
   ),
   dashboardBody(
-    # Custom Modern Survivor Theme CSS
+    # Custom Modern Light Theme CSS
     tags$head(
+      tags$meta(name = "viewport",
+                content = "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"),
       tags$style(HTML("
         /* Import Google Fonts */
-        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Roboto:wght@400;500;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Bebas+Neue&display=swap');
         
-        /* Main body - modern charcoal with subtle texture */
+        /* Main body - clean white with subtle warmth */
         body, .content-wrapper, .right-side {
-          background: linear-gradient(135deg, #2a2e3d 0%, #1e2230 50%, #252835 100%) !important;
-          font-family: 'Roboto', sans-serif !important;
-          color: #e8eef2 !important;
+          background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 50%, #f1f3f5 100%) !important;
+          font-family: 'Inter', sans-serif !important;
+          color: #212529 !important;
         }
         
-        /* Sidebar styling - sleek dark */
+        /* Sidebar styling - clean with accent */
         .skin-blue .main-sidebar {
-          background: linear-gradient(180deg, #1a1d28 0%, #232734 100%) !important;
-          border-right: 2px solid #4a90a4 !important;
+          background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%) !important;
+          border-right: 2px solid #e9ecef !important;
+          box-shadow: 2px 0 8px rgba(0, 0, 0, 0.05) !important;
         }
         
         .sidebar-menu > li > a {
-          color: #d4dce3 !important;
+          color: #495057 !important;
           border-left: 3px solid transparent !important;
           transition: all 0.3s ease !important;
+          font-weight: 500 !important;
         }
         
         .sidebar-menu > li > a:hover,
         .sidebar-menu > li.active > a {
-          background: rgba(74, 144, 164, 0.15) !important;
-          border-left: 3px solid #4a90a4 !important;
-          color: #6db8d4 !important;
+          background: rgba(37, 99, 235, 0.08) !important;
+          border-left: 3px solid #2563eb !important;
+          color: #2563eb !important;
         }
         
         /* Header styling - clean and modern */
         .skin-blue .main-header .navbar {
-          background: linear-gradient(90deg, #1a1d28 0%, #232734 100%) !important;
-          border-bottom: 3px solid #4a90a4 !important;
+          background: linear-gradient(90deg, #ffffff 0%, #f8f9fa 100%) !important;
+          border-bottom: 3px solid #2563eb !important;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
         }
         
         .skin-blue .main-header .logo {
-          background: #141720 !important;
-          color: #6db8d4 !important;
+          background: #2563eb !important;
+          color: #ffffff !important;
           font-family: 'Bebas Neue', cursive !important;
           font-size: 28px !important;
           letter-spacing: 3px !important;
-          text-shadow: 2px 2px 8px rgba(74, 144, 164, 0.4) !important;
-          border-right: 3px solid #4a90a4 !important;
+          text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.2) !important;
+          border-right: 3px solid #1e40af !important;
         }
         
         /* Box styling - clean cards with subtle shadows */
         .box {
-          background: linear-gradient(145deg, #323745 0%, #2a2e3d 100%) !important;
-          border: 1px solid #4a5566 !important;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
-          border-radius: 10px !important;
+          background: #ffffff !important;
+          border: 1px solid #e9ecef !important;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+          border-radius: 12px !important;
         }
         
         .box-header {
-          background: linear-gradient(90deg, #3a3f4f 0%, #2e3340 100%) !important;
-          color: #6db8d4 !important;
+          background: linear-gradient(90deg, #f8f9fa 0%, #ffffff 100%) !important;
+          color: #212529 !important;
           font-family: 'Bebas Neue', cursive !important;
           font-size: 22px !important;
           letter-spacing: 2px !important;
-          border-bottom: 2px solid #4a5566 !important;
-          border-radius: 10px 10px 0 0 !important;
+          border-bottom: 2px solid #e9ecef !important;
+          border-radius: 12px 12px 0 0 !important;
         }
         
         .box-title {
-          color: #6db8d4 !important;
+          color: #212529 !important;
         }
         
         /* H2 headers - bold modern style */
         h2, h3, h4 {
           font-family: 'Bebas Neue', cursive !important;
-          color: #6db8d4 !important;
-          text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.5) !important;
+          color: #2563eb !important;
           letter-spacing: 2px !important;
-          border-bottom: 3px solid #4a90a4 !important;
+          border-bottom: 3px solid #2563eb !important;
           padding-bottom: 12px !important;
           margin-bottom: 20px !important;
         }
         
-        /* Value boxes - modern with depth */
+        /* Value boxes - vibrant and modern */
         .small-box {
-          border-radius: 10px !important;
-          border: 1px solid rgba(255, 255, 255, 0.1) !important;
-          box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4) !important;
+          border-radius: 12px !important;
+          border: 1px solid rgba(0, 0, 0, 0.08) !important;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
         }
         
         .small-box.bg-yellow {
-          background: linear-gradient(135deg, #d4af37 0%, #ffd700 100%) !important;
-          border-color: #ffd700 !important;
+          background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%) !important;
+          border-color: #f59e0b !important;
         }
         
         .small-box.bg-light-blue {
-          background: linear-gradient(135deg, #a8a9ad 0%, #c0c0c0 100%) !important;
-          border-color: #c0c0c0 !important;
-          color: #2a2e3d !important;
+          background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%) !important;
+          border-color: #64748b !important;
+          color: #ffffff !important;
         }
         
         .small-box.bg-light-blue h3, .small-box.bg-light-blue p {
-          color: #2a2e3d !important;
-          text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.3) !important;
+          color: #ffffff !important;
+          text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3) !important;
         }
         
         .small-box.bg-orange {
-          background: linear-gradient(135deg, #b87333 0%, #cd7f32 100%) !important;
-          border-color: #cd7f32 !important;
+          background: linear-gradient(135deg, #fb923c 0%, #f97316 100%) !important;
+          border-color: #f97316 !important;
         }
         
         .small-box.bg-aqua {
-          background: linear-gradient(135deg, #48c9b0 0%, #76d7c4 100%) !important;
+          background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%) !important;
         }
         
         .small-box.bg-blue {
-          background: linear-gradient(135deg, #3498db 0%, #5dade2 100%) !important;
+          background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
         }
         
         .small-box.bg-green {
-          background: linear-gradient(135deg, #52be80 0%, #7dcea0 100%) !important;
+          background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
         }
         
         .small-box.bg-purple {
-          background: linear-gradient(135deg, #8e44ad 0%, #a569bd 100%) !important;
+          background: linear-gradient(135deg, #a855f7 0%, #9333ea 100%) !important;
         }
         
         .small-box h3, .small-box p {
-          text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.6) !important;
-          font-weight: bold !important;
+          text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.2) !important;
+          font-weight: 600 !important;
         }
         
         /* Slider styling - modern blue accent */
         .irs-bar {
-          background: linear-gradient(90deg, #4a90a4 0%, #6db8d4 100%) !important;
+          background: linear-gradient(90deg, #2563eb 0%, #3b82f6 100%) !important;
           border: none !important;
         }
         
         .irs-slider {
-          background: #6db8d4 !important;
-          border: 2px solid #8ecee0 !important;
-          box-shadow: 0 0 8px rgba(109, 184, 212, 0.6) !important;
+          background: #2563eb !important;
+          border: 2px solid #3b82f6 !important;
+          box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3) !important;
         }
         
         .irs-from, .irs-to, .irs-single {
-          background: #4a90a4 !important;
+          background: #2563eb !important;
           color: white !important;
-          font-weight: bold !important;
+          font-weight: 600 !important;
         }
         
         .irs-grid-text {
-          color: #d4dce3 !important;
+          color: #6b7280 !important;
         }
         
         /* Form controls - modern inputs */
         .form-control, .selectize-input {
-          background: #323745 !important;
-          border: 2px solid #4a5566 !important;
-          color: #e8eef2 !important;
+          background: #ffffff !important;
+          border: 2px solid #e5e7eb !important;
+          color: #212529 !important;
           border-radius: 8px !important;
         }
         
         .form-control:focus, .selectize-input.focus {
-          border-color: #6db8d4 !important;
-          box-shadow: 0 0 8px rgba(109, 184, 212, 0.4) !important;
+          border-color: #2563eb !important;
+          box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
         }
         
         .selectize-dropdown {
-          background: #323745 !important;
-          border: 2px solid #4a5566 !important;
-          color: #e8eef2 !important;
+          background: #ffffff !important;
+          border: 2px solid #e5e7eb !important;
+          color: #212529 !important;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
         }
         
         .selectize-dropdown-content .option:hover {
-          background: rgba(74, 144, 164, 0.3) !important;
-          color: #6db8d4 !important;
+          background: rgba(37, 99, 235, 0.1) !important;
+          color: #2563eb !important;
         }
         
         /* Checkbox styling */
         .checkbox label {
-          color: #e8eef2 !important;
+          color: #212529 !important;
           font-weight: 500 !important;
         }
         
         /* Table styling - clean modern tables */
         table {
-          background: #2a2e3d !important;
-          border: 1px solid #4a5566 !important;
+          background: #ffffff !important;
+          border: 1px solid #e9ecef !important;
           border-collapse: separate !important;
           border-spacing: 0 !important;
-          border-radius: 10px !important;
+          border-radius: 12px !important;
           overflow: hidden !important;
         }
         
         table thead {
-          background: linear-gradient(90deg, #3a3f4f 0%, #2e3340 100%) !important;
-          color: #6db8d4 !important;
+          background: linear-gradient(90deg, #f8f9fa 0%, #f1f3f5 100%) !important;
+          color: #212529 !important;
           font-family: 'Bebas Neue', cursive !important;
           font-size: 18px !important;
           letter-spacing: 1.5px !important;
         }
         
         table thead th {
-          border-bottom: 2px solid #4a90a4 !important;
+          border-bottom: 2px solid #2563eb !important;
           padding: 15px 10px !important;
-          color: #6db8d4 !important;
+          color: #212529 !important;
         }
         
         table tbody tr {
-          border-bottom: 1px solid rgba(74, 85, 102, 0.4) !important;
+          border-bottom: 1px solid rgba(233, 236, 239, 0.6) !important;
           transition: all 0.2s ease !important;
         }
         
         table tbody tr:hover {
-          background: rgba(74, 144, 164, 0.12) !important;
+          background: rgba(37, 99, 235, 0.04) !important;
         }
         
         table tbody td {
           padding: 12px 10px !important;
-          color: #e8eef2 !important;
+          color: #212529 !important;
         }
         
-        /* Subtle geometric pattern overlay */
+        /* Subtle pattern overlay */
         .content-wrapper::before {
           content: '' !important;
           position: fixed !important;
@@ -497,8 +579,8 @@ ui <- dashboardPage(
           width: 100% !important;
           height: 100% !important;
           background-image: 
-            linear-gradient(30deg, transparent 48%, rgba(74, 144, 164, 0.02) 49%, rgba(74, 144, 164, 0.02) 51%, transparent 52%),
-            linear-gradient(150deg, transparent 48%, rgba(74, 144, 164, 0.02) 49%, rgba(74, 144, 164, 0.02) 51%, transparent 52%) !important;
+            linear-gradient(30deg, transparent 48%, rgba(37, 99, 235, 0.015) 49%, rgba(37, 99, 235, 0.015) 51%, transparent 52%),
+            linear-gradient(150deg, transparent 48%, rgba(37, 99, 235, 0.015) 49%, rgba(37, 99, 235, 0.015) 51%, transparent 52%) !important;
           background-size: 80px 80px !important;
           pointer-events: none !important;
           z-index: 1 !important;
@@ -514,7 +596,7 @@ ui <- dashboardPage(
           background: transparent !important;
         }
         
-        /* Modern accent line on boxes (but not value boxes) */
+        /* Modern accent line on boxes */
         .box:not(.small-box)::before {
           content: '' !important;
           position: absolute !important;
@@ -522,22 +604,271 @@ ui <- dashboardPage(
           left: 0 !important;
           width: 4px !important;
           height: 100% !important;
-          background: linear-gradient(180deg, #4a90a4 0%, #6db8d4 100%) !important;
-          border-radius: 10px 0 0 10px !important;
+          background: linear-gradient(180deg, #2563eb 0%, #3b82f6 100%) !important;
+          border-radius: 12px 0 0 12px !important;
+        }
+
+        /* ===== MOBILE OPTIMIZATIONS ===== */
+
+        /* Mobile breakpoint - tablets and phones */
+        @media (max-width: 768px) {
+
+          /* Header - reduce padding, smaller logo */
+          .skin-blue .main-header .logo {
+            font-size: 20px !important;
+            letter-spacing: 1px !important;
+            padding: 10px 5px !important;
+          }
+
+          /* Sidebar - make collapsible work better */
+          .main-sidebar {
+            padding-top: 0 !important;
+          }
+
+          .sidebar-menu > li > a {
+            padding: 12px 15px !important;
+            font-size: 14px !important;
+          }
+
+          /* Value boxes - stack and enlarge */
+          .small-box {
+            margin-bottom: 15px !important;
+          }
+
+          .small-box h3 {
+            font-size: 32px !important;
+          }
+
+          .small-box p {
+            font-size: 14px !important;
+          }
+
+          /* H2 headers - smaller on mobile */
+          h2 {
+            font-size: 24px !important;
+          }
+
+          /* Box titles */
+          .box-header {
+            font-size: 18px !important;
+            padding: 10px !important;
+          }
+
+          /* Tables - make scrollable horizontally */
+          .table-responsive {
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+          }
+
+          table {
+            font-size: 12px !important;
+            min-width: 600px !important;
+          }
+
+          table thead th {
+            padding: 8px 4px !important;
+            font-size: 14px !important;
+          }
+
+          table tbody td {
+            padding: 8px 4px !important;
+          }
+
+          /* Tribe badges - smaller on mobile */
+          table tbody td span {
+            font-size: 11px !important;
+            padding: 1px 4px !important;
+          }
+
+          /* Slider - increase touch target */
+          .irs-slider {
+            width: 24px !important;
+            height: 24px !important;
+          }
+
+          .irs-bar {
+            height: 12px !important;
+          }
+
+          /* Buttons - larger touch targets */
+          .btn {
+            padding: 12px 16px !important;
+            font-size: 14px !important;
+            min-height: 44px !important;
+          }
+
+          /* Select inputs - easier to tap */
+          .form-control, .selectize-input {
+            padding: 12px !important;
+            font-size: 16px !important;
+            min-height: 44px !important;
+          }
+
+          /* Plots - responsive sizing */
+          .girafe, .plotly {
+            width: 100% !important;
+            height: auto !important;
+            min-height: 300px !important;
+          }
+
+          /* Content wrapper - reduce padding */
+          .content-wrapper {
+            padding: 10px !important;
+          }
+
+          .content {
+            padding: 5px !important;
+          }
+
+          /* Box - reduce padding */
+          .box {
+            margin-bottom: 15px !important;
+          }
+
+          .box-body {
+            padding: 10px !important;
+          }
+
+          /* Checkboxes - larger labels */
+          .checkbox label {
+            font-size: 14px !important;
+            padding-left: 25px !important;
+          }
+
+          input[type='checkbox'] {
+            width: 20px !important;
+            height: 20px !important;
+          }
+
+          /* Legend - smaller text */
+          .legend {
+            font-size: 10px !important;
+          }
+        }
+
+        /* Very small phones */
+        @media (max-width: 480px) {
+
+          /* Even smaller fonts */
+          body, .content-wrapper, .right-side {
+            font-size: 14px !important;
+          }
+
+          h2 {
+            font-size: 20px !important;
+          }
+
+          .small-box h3 {
+            font-size: 24px !important;
+          }
+
+          .small-box p {
+            font-size: 12px !important;
+          }
+
+          table {
+            font-size: 11px !important;
+          }
+
+          .box-header {
+            font-size: 16px !important;
+          }
+        }
+
+        /* Landscape mobile optimization */
+        @media (max-width: 768px) and (orientation: landscape) {
+
+          /* Reduce header/sidebar to maximize content area */
+          .main-header .navbar {
+            min-height: 40px !important;
+          }
+
+          .main-header .logo {
+            padding: 8px 5px !important;
+            font-size: 18px !important;
+          }
+
+          .content-wrapper {
+            padding: 5px !important;
+          }
+        }
+
+        /* Mobile Navigation Dropdown */
+        .mobile-nav-container {
+          display: none;
+          background: linear-gradient(90deg, #2563eb 0%, #3b82f6 100%);
+          padding: 15px;
+          margin: -10px -10px 20px -10px;
+          border-radius: 8px;
+          box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+        }
+
+        .mobile-nav-container label {
+          color: white !important;
+          font-weight: 600 !important;
+          margin-bottom: 8px !important;
+          display: block !important;
+          font-size: 14px !important;
+        }
+
+        .mobile-nav-container .selectize-input {
+          background: white !important;
+          border: 2px solid white !important;
+          font-weight: 500 !important;
+        }
+
+        @media (max-width: 768px) {
+          .mobile-nav-container {
+            display: block !important;
+          }
+
+          /* Make sidebar toggle more visible */
+          .sidebar-toggle {
+            background: #2563eb !important;
+            border-radius: 8px !important;
+            margin: 8px !important;
+          }
+
+          .sidebar-toggle:hover {
+            background: #1e40af !important;
+          }
         }
       "))
+    ),
+    # Mobile Navigation Dropdown
+    div(class = "mobile-nav-container",
+        selectInput("mobile_nav", "Navigate to:",
+                    choices = c("Scoreboard" = "Scoreboard",
+                                "Visuals" = "Visuals",
+                                "Pick Performance" = "PickPerformance",
+                                "Head-to-Head" = "HeadToHead",
+                                "Rules" = "Rules"),
+                    selected = "Scoreboard",
+                    width = "100%")
     ),
     tabItems(
       # Scoreboard Tab
       tabItem("Scoreboard",
+              conditionalPanel(
+                condition = "output.validation_count > 0",
+                box(
+                  width = 12,
+                  status = "warning",
+                  solidHeader = TRUE,
+                  title = "Data Validation Warnings",
+                  icon = icon("exclamation-triangle"),
+                  htmlOutput("validation_warnings")
+                )
+              ),
               h2("Score Board by Week"),
               fluidRow(
-                valueBoxOutput("leader"),
-                valueBoxOutput("runnerup"),
-                valueBoxOutput("thirdplace")
+                column(12, valueBoxOutput("leader"), class = "col-sm-4"),
+                column(12, valueBoxOutput("runnerup"), class = "col-sm-4"),
+                column(12, valueBoxOutput("thirdplace"), class = "col-sm-4")
               ),
               sliderInput("week", "Week:", 1, currentweek, currentweek),
-              formattableOutput("scoreboard")
+              div(class = "table-responsive",
+                  formattableOutput("scoreboard"))
       ),
       # Visuals Tab
       tabItem("Visuals",
@@ -574,15 +905,16 @@ ui <- dashboardPage(
                 )
               ),
               fluidRow(
-                valueBoxOutput("best_pick"),
-                valueBoxOutput("worst_pick"),
-                valueBoxOutput("most_valuable_mvp")
+                column(12, valueBoxOutput("best_pick"), class = "col-sm-4"),
+                column(12, valueBoxOutput("worst_pick"), class = "col-sm-4"),
+                column(12, valueBoxOutput("most_valuable_mvp"), class = "col-sm-4")
               ),
               fluidRow(
                 box(
                   title = "Pick Performance Table",
                   width = 12,
-                  formattableOutput("pick_performance_table")
+                  div(class = "table-responsive",
+                      formattableOutput("pick_performance_table"))
                 )
               ),
               fluidRow(
@@ -617,18 +949,19 @@ ui <- dashboardPage(
                 )
               ),
               fluidRow(
-                valueBoxOutput("h2h_score1"),
-                valueBoxOutput("h2h_score2"),
+                column(12, valueBoxOutput("h2h_score1"), class = "col-sm-4"),
+                column(12, valueBoxOutput("h2h_score2"), class = "col-sm-4"),
                 conditionalPanel(
                   condition = "input.add_third == true",
-                  valueBoxOutput("h2h_score3")
+                  column(12, valueBoxOutput("h2h_score3"), class = "col-sm-4")
                 )
               ),
               fluidRow(
                 box(
                   title = "Team Comparison",
                   width = 12,
-                  formattableOutput("h2h_teams")
+                  div(class = "table-responsive",
+                      formattableOutput("h2h_teams"))
                 )
               ),
               fluidRow(
@@ -683,10 +1016,47 @@ ui <- dashboardPage(
 
 # ---- Server ----
 server <- function(input, output, session) {
-  
-  weekInput <- reactive({ 
+
+  # ---- Mobile Navigation Handler ----
+  observeEvent(input$mobile_nav, {
+    updateTabItems(session, "tabs", selected = input$mobile_nav)
+  }, ignoreInit = TRUE)
+
+  # ---- Data Validation Reactive ----
+  data_validation_issues <- reactive({
+    validate_sheets_data(tribes, picks, eliminated, finale, idols)
+  })
+
+  validation_status <- reactive({
+    issues <- data_validation_issues()
+    if(length(issues) == 0) {
+      list(status = "success", message = "All data valid", count = 0)
+    } else {
+      list(status = "warning", message = paste(length(issues), "issues found"),
+           count = length(issues), issues = issues)
+    }
+  })
+
+  output$validation_count <- reactive({
+    validation_status()$count
+  })
+  outputOptions(output, "validation_count", suspendWhenHidden = FALSE)
+
+  output$validation_warnings <- renderUI({
+    val <- validation_status()
+    if(val$count == 0) return(NULL)
+
+    issue_list <- paste0("<li>", val$issues, "</li>", collapse = "")
+    HTML(paste0(
+      "<p><strong>Found ", val$count, " data issue(s):</strong></p>",
+      "<ul>", issue_list, "</ul>",
+      "<p><em>The app will continue to run with available data, but results may be incomplete.</em></p>"
+    ))
+  })
+
+  weekInput <- reactive({
     req(input$week)
-    input$week 
+    input$week
   })
   
   # Central scoreboard data reactive with caching
@@ -802,22 +1172,22 @@ server <- function(input, output, session) {
     
     # Create badge formatter with pre-computed simple values only
     badge_fmt <- formatter("span",
-      style = x ~ {
-        # Look up color from pre-computed named vector (vectorized)
-        bg_color <- ifelse(!is.na(x) & x %in% names(tribe_colors_lookup),
-                          tribe_colors_lookup[x],
-                          "#d9d9d9")
-        
-        style(
-          display = "inline-block",
-          padding = "2px 6px",
-          "border-radius" = "8px",
-          "background-color" = bg_color,
-          color = ifelse(x %in% truly_eliminated, "gray", "white"),
-          "text-decoration" = ifelse(x %in% truly_eliminated, "line-through", "none"),
-          "font-weight" = "bold"
-        )
-      }
+                           style = x ~ {
+                             # Look up color from pre-computed named vector (vectorized)
+                             bg_color <- ifelse(!is.na(x) & x %in% names(tribe_colors_lookup),
+                                                tribe_colors_lookup[x],
+                                                "#d9d9d9")
+                             
+                             style(
+                               display = "inline-block",
+                               padding = "2px 6px",
+                               "border-radius" = "8px",
+                               "background-color" = bg_color,
+                               color = ifelse(x %in% truly_eliminated, "gray", "white"),
+                               "text-decoration" = ifelse(x %in% truly_eliminated, "line-through", "none"),
+                               "font-weight" = "bold"
+                             )
+                           }
     )
     
     df %>%
@@ -1233,28 +1603,36 @@ server <- function(input, output, session) {
   # MVP vs Regular pick comparison
   output$mvp_comparison_plot <- renderPlot({
     data <- pick_performance_data() %>%
-      filter(times_picked > 0) %>%
-      mutate(
-        mvp_avg = ifelse(times_mvp > 0, total_points / times_picked, NA),
-        regular_avg = ifelse(times_regular > 0, 
-                             (total_weekly / times_picked) + 
-                               (ifelse(!is.na(winner) & cast == winner, 30, 0) +
-                                  ifelse(!is.na(second) & cast == second, 20, 0) +
-                                  ifelse(!is.na(third) & cast == third, 10, 0)), 
-                             NA)
-      ) %>%
-      filter(!is.na(mvp_avg) | !is.na(regular_avg)) %>%
-      pivot_longer(cols = c(mvp_avg, regular_avg),
-                   names_to = "pick_type",
-                   values_to = "avg_points") %>%
-      filter(!is.na(avg_points)) %>%
-      mutate(pick_type = ifelse(pick_type == "mvp_avg", "As MVP", "As Regular Pick"))
+      filter(times_picked > 0)
     
     if(nrow(data) == 0) return(NULL)
     
-    ggplot(data, aes(x = reorder(cast, avg_points), y = avg_points, fill = pick_type)) +
-      geom_bar(stat = "identity", position = "dodge") +
-      scale_fill_manual(values = c("As MVP" = "#ffd700", "As Regular Pick" = "#4a90a4")) +
+    # Create separate rows for MVP and Regular picks
+    mvp_data <- data %>%
+      filter(times_mvp > 0) %>%
+      mutate(
+        pick_type = "As MVP",
+        avg_points = total_points / times_mvp  # Average when picked as MVP
+      ) %>%
+      select(cast, pick_type, avg_points)
+    
+    regular_data <- data %>%
+      filter(times_regular > 0) %>%
+      mutate(
+        pick_type = "As Regular Pick",
+        # Calculate average for regular picks only
+        avg_points = (total_weekly / times_picked) * (times_regular / times_picked)
+      ) %>%
+      select(cast, pick_type, avg_points)
+    
+    plot_data <- bind_rows(mvp_data, regular_data) %>%
+      filter(avg_points > 0)
+    
+    if(nrow(plot_data) == 0) return(NULL)
+    
+    ggplot(plot_data, aes(x = reorder(cast, avg_points), y = avg_points, fill = pick_type)) +
+      geom_bar(stat = "identity", position = "dodge", alpha = 0.85) +
+      scale_fill_manual(values = c("As MVP" = "#f59e0b", "As Regular Pick" = "#2563eb")) +
       coord_flip() +
       labs(y = "Average Points per Team", x = "") +
       mytheme() +
@@ -1500,10 +1878,10 @@ server <- function(input, output, session) {
     
     ggplot(breakdown_data, aes(x = Contestant, y = Points, fill = Category)) +
       geom_bar(stat = "identity", position = "stack") +
-      scale_fill_manual(values = c("Running Score Total" = "#2c7fb8",
-                                   "Idol Bonus" = "#7a5195",
-                                   "MVP Bonus" = "#41ab5d",
-                                   "Top 3 Bonuses" = "#feb24c")) +
+      scale_fill_manual(values = c("Running Score Total" = "#2563eb",
+                                   "Idol Bonus" = "#8b5cf6",
+                                   "MVP Bonus" = "#059669",
+                                   "Top 3 Bonuses" = "#f59e0b")) +
       labs(y = "Points", x = "") +
       mytheme() +
       theme(legend.position = "bottom",
