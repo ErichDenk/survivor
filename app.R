@@ -205,9 +205,6 @@ third <- if(nrow(finale) > 0 && any(finale$finish == "third", na.rm = TRUE)) {
 # Vector for Cast (from tribes)
 castaways <- tribes %>% pull(cast)
 
-# Tribe colors vector for badges (named vector)
-tribe_colors <- setNames(tribes$color, tribes$cast)
-
 # ---- Scoring Function (uses eliminated dataframe) ----
 weekly_score <- function(x, y) {
   # Only the previously eliminated weeks considered
@@ -234,32 +231,7 @@ weekly_score <- function(x, y) {
     rename_with(~paste0(., y), epi_remain:epi_score)
 }
 
-# ---- Formatting helper for eliminated names ----
-elimformatter <- formatter(
-  "span",
-  style = x ~ {
-    # Only mark truly eliminated castaways (with non-NA weeks)
-    truly_eliminated <- eliminated %>% 
-      filter(!is.na(week)) %>% 
-      pull(cast)
-    
-    style(
-      color = ifelse(x %in% truly_eliminated, "gray", "black"),
-      "text-decoration" = ifelse(x %in% truly_eliminated, "line-through", "none")
-    )
-  }
-)
-
 # ---- Helper Functions ----
-place_color <- function(place) {
-  case_when(
-    place == 1 ~ "gold",      # custom gold CSS class
-    place == 2 ~ "silver",    # custom silver CSS class
-    place == 3 ~ "bronze",    # custom bronze CSS class
-    TRUE ~ "aqua"
-  )
-}
-
 # Tribe badge formatter for all picks
 tribe_badge_formatter <- function(pick_col) {
   # Get list of truly eliminated castaways (with non-NA week values)
@@ -337,51 +309,8 @@ compute_trajectory <- function(max_week) {
   }))
 }
 
-# ---- Popular Picks & Tribe Plots ----
-mvps <- picks %>% 
-  group_by(MVP) %>%
-  summarize(MVP_picks = n()) %>%
-  ungroup() %>%
-  filter(MVP_picks > 0)
-
-popular_picks <- picks %>%
-  pivot_longer(cols = starts_with("Pick"),
-               values_to = "cast") %>%
-  group_by(cast) %>%
-  summarize(Other_picks = n()) %>%
-  ungroup() %>%
-  full_join(mvps, by = c("cast" = "MVP")) %>%
-  left_join(tribes, by = c("cast")) %>%
-  replace_na(list(MVP_picks = 0)) %>%
-  mutate(cast = as_factor(cast), 
-         Total = MVP_picks + Other_picks) %>%
-  pivot_longer(cols = ends_with("picks"), 
-               names_to = "type", 
-               values_to = "Val") %>%
-  arrange(desc(Total), cast) %>%
-  mutate(cast = fct_reorder(cast, Val), 
-         type = str_remove(type, "_picks"))
-
-popular <- ggplot(data = popular_picks, aes(x = cast, y = Val, fill = type)) +
-  geom_bar(stat="identity", position = "stack", alpha = .85) +
-  scale_fill_manual(values = c("#2563eb", "#059669")) +  # Modern blue and green
-  coord_flip() +
-  mytheme()
-
-# Use dynamic tribe colors from tribes sheet
+# ---- Tribe Color Map (used by plots and badge formatters) ----
 tribe_color_map <- setNames(tribes$color, tribes$tribe)
-
-bytribe <- popular_picks %>%
-  group_by(tribe, color) %>%
-  summarize(Total = sum(Total), .groups = "drop") %>%
-  ungroup() %>%
-  arrange(desc(Total)) %>%
-  ggplot(aes(x = reorder(tribe, Total), y = Total, fill = tribe)) +
-  geom_bar(stat = "identity") +
-  scale_fill_manual(values = tribe_color_map) +
-  theme(legend.position = "none") +
-  coord_flip() +
-  mytheme()
 
 # ---- UI ----
 ui <- dashboardPage(
@@ -1109,10 +1038,14 @@ server <- function(input, output, session) {
     req(input$week)
     input$week
   })
+
+  # Pre-compute full trajectory once; shared by ScoreTrajectory and h2h_trajectory
+  all_trajectory_data <- reactive({
+    compute_trajectory(currentweek)
+  })
   
   # Central scoreboard data reactive with caching
   scoreboard_data <- reactive({
-    req(exists("picks"))
     req(nrow(picks) > 0)
     
     w <- max(1, weekInput())
@@ -1153,17 +1086,16 @@ server <- function(input, output, session) {
       }
     }
     
+    # Hoist column-name check out of the per-row loop
+    score_cols <- names(select(df, starts_with("epi_score")))
+
     df <- df %>%
       rowwise() %>%
       mutate(
-        # Safely sum epi_score columns (may not exist in all scenarios)
-        EpiScore = {
-          score_cols <- df %>% select(starts_with("epi_score")) %>% names()
-          if(length(score_cols) > 0) {
-            sum(c_across(starts_with("epi_score")), na.rm = TRUE)
-          } else {
-            0
-          }
+        EpiScore = if (length(score_cols) > 0) {
+          sum(c_across(starts_with("epi_score")), na.rm = TRUE)
+        } else {
+          0
         },
         tot_remain = {
           # Only count castaways who are actually eliminated (have non-NA week values)
@@ -1316,7 +1248,7 @@ server <- function(input, output, session) {
   
   # Score Trajectory Plot - Interactive
   output$ScoreTrajectory <- renderGirafe({
-    trajectory_data <- compute_trajectory(currentweek)
+    trajectory_data <- all_trajectory_data()
     
     # Create a vibrant, distinguishable color palette
     n_contestants <- length(unique(trajectory_data$Contestant))
@@ -1364,10 +1296,7 @@ server <- function(input, output, session) {
     )
   })
   
-  # By tribe plot
-  output$ByTribe <- renderPlot({ bytribe })
-  
-  # ---- Head-to-Head Comparison Logic ----
+  # ---- Risk/Reward Plot ----
   output$RiskReward <- renderGirafe({
     # Calculate popularity (how many times picked)
     pick_popularity <- picks %>%
@@ -1400,7 +1329,7 @@ server <- function(input, output, session) {
       left_join(pick_performance, by = "cast") %>%
       left_join(tribes, by = "cast") %>%
       mutate(
-        still_alive = !(cast %in% eliminated$cast),
+        still_alive = !(cast %in% (eliminated %>% filter(!is.na(week)) %>% pull(cast))),
         performance_category = case_when(
           weeks_survived >= currentweek * 0.8 ~ "Elite Survivor",
           weeks_survived >= currentweek * 0.5 ~ "Mid-game Exit",
@@ -1613,8 +1542,8 @@ server <- function(input, output, session) {
     if(nrow(data) == 0) return(formattable(data.frame()))
     
     data %>%
-      mutate(Status = ifelse(still_active, "✅ Active", "❌ Out")) %>%
-      select(cast, tribe, Status, times_picked, times_mvp, weeks_survived, 
+      mutate(Status = ifelse(still_active, "Active", "Out")) %>%
+      select(cast, tribe, Status, times_picked, times_mvp, weeks_survived,
              total_points, avg_points, total_weekly, total_bonuses) %>%
       rename(
         Castaway = cast,
@@ -1631,7 +1560,12 @@ server <- function(input, output, session) {
         Castaway = formatter("span", style = x ~ style("font-weight" = "bold")),
         `Total Points` = color_bar("#6db8d4"),
         `Avg Points` = color_bar("#4a90a4"),
-        Status = formatter("span", style = x ~ style("font-weight" = "bold"))
+        Status = formatter("span",
+          style = x ~ style(
+            "font-weight" = "bold",
+            color = ifelse(x == "Active", "#059669", "#6b7280")
+          )
+        )
       ))
   })
   
@@ -1813,7 +1747,7 @@ server <- function(input, output, session) {
       contestants_to_compare <- c(contestants_to_compare, input$contestant3)
     }
     
-    trajectory_data <- compute_trajectory(currentweek) %>%
+    trajectory_data <- all_trajectory_data() %>%
       filter(Contestant %in% contestants_to_compare)
     
     # Assign colors
@@ -1855,7 +1789,11 @@ server <- function(input, output, session) {
   output$h2h_overlap <- renderUI({
     data <- h2h_data()
     if(nrow(data) == 0) return(HTML("<p>No data available</p>"))
-    
+
+    if(input$contestant1 == input$contestant2) {
+      return(HTML("<p><em>Select two different contestants to compare overlap.</em></p>"))
+    }
+
     # Get all picks for each contestant
     get_picks <- function(contestant_name) {
       row <- data %>% filter(Contestant == contestant_name)
