@@ -286,6 +286,57 @@ tribe_badge_formatter <- function(pick_col) {
   )
 }
 
+# ---- Trajectory Helper ----
+# Computes cumulative score for all contestants at each week 1:max_week,
+# including weekly episode points, idol bonuses, and finale bonuses.
+compute_trajectory <- function(max_week) {
+  bind_rows(lapply(seq_len(max_week), function(w) {
+    l <- lapply(seq_len(w), weekly_score, x = picks)
+
+    df <- if (length(l) == 1) {
+      l[[1]]
+    } else {
+      reduce(l, left_join, by = c("Contestant", "MVP", "Pick2", "Pick3", "Pick4", "Pick5"))
+    }
+
+    df <- df %>%
+      mutate(fullteam = as.vector(paste(MVP, Pick2, Pick3, Pick4, Pick5, sep = ",")))
+
+    # Idol bonuses up to week w
+    if (nrow(idols) == 0) {
+      df <- df %>% mutate(idol_bonus = 0)
+    } else {
+      idols_found_w <- idols %>% filter(!is.na(week_found) & week_found <= w)
+      if (nrow(idols_found_w) == 0) {
+        df <- df %>% mutate(idol_bonus = 0)
+      } else {
+        df <- df %>%
+          rowwise() %>%
+          mutate(idol_bonus = {
+            team_members <- c(MVP, Pick2, Pick3, Pick4, Pick5)
+            sum(team_members %in% idols_found_w$cast) * 2
+          }) %>%
+          ungroup()
+      }
+    }
+
+    df %>%
+      rowwise() %>%
+      mutate(EpiScore = sum(c_across(starts_with("epi_score")), na.rm = TRUE)) %>%
+      ungroup() %>%
+      mutate(
+        mvpbonus   = ifelse(!is.na(winner) & MVP == winner, 30, 0),
+        winneradd  = if_else(!is.na(winner) & str_detect(fullteam, fixed(winner)), 30, 0),
+        secondadd  = if_else(!is.na(second) & str_detect(fullteam, fixed(second)), 20, 0),
+        thirdadd   = if_else(!is.na(third)  & str_detect(fullteam, fixed(third)),  10, 0),
+        top3bonus  = winneradd + secondadd + thirdadd,
+        Score      = as.integer(EpiScore + top3bonus + mvpbonus + idol_bonus),
+        Week       = w
+      ) %>%
+      select(Contestant, Week, Score)
+  }))
+}
+
 # ---- Popular Picks & Tribe Plots ----
 mvps <- picks %>% 
   group_by(MVP) %>%
@@ -1138,11 +1189,11 @@ server <- function(input, output, session) {
       mutate(
         Score = as.integer(EpiScore + top3bonus + mvpbonus + idol_bonus),
         Status = case_when(
-          tot_remain == 5 ~ "💪 Full Team",
-          tot_remain >= 3 ~ "✅ Strong",
-          tot_remain >= 2 ~ "⚠️ Vulnerable",
-          tot_remain == 1 ~ "🚨 Critical",
-          TRUE ~ "💀 Eliminated"
+          tot_remain == 5 ~ "Full Team",
+          tot_remain >= 3 ~ "Strong",
+          tot_remain >= 2 ~ "Vulnerable",
+          tot_remain == 1 ~ "Critical",
+          TRUE ~ "Eliminated"
         )
       ) %>%
       rename(`Remaining Survivors` = tot_remain,
@@ -1200,7 +1251,19 @@ server <- function(input, output, session) {
         Pick4 = badge_fmt,
         Pick5 = badge_fmt,
         Place = formatter("span", style = x ~ style("font-weight" = "bold")),
-        Status = formatter("span", style = x ~ style("font-weight" = "bold"))
+        Status = formatter("span",
+          style = x ~ style(
+            "font-weight" = "bold",
+            color = case_when(
+              x == "Full Team"  ~ "#059669",
+              x == "Strong"     ~ "#16a34a",
+              x == "Vulnerable" ~ "#d97706",
+              x == "Critical"   ~ "#dc2626",
+              x == "Eliminated" ~ "#6b7280",
+              TRUE              ~ "#212529"
+            )
+          )
+        )
       ))
   })
   
@@ -1253,18 +1316,7 @@ server <- function(input, output, session) {
   
   # Score Trajectory Plot - Interactive
   output$ScoreTrajectory <- renderGirafe({
-    # Calculate scores for all weeks
-    all_weeks <- lapply(1:currentweek, function(w) {
-      l <- lapply(1:w, weekly_score, x = picks)
-      reduce(l, left_join) %>%
-        rowwise() %>%
-        mutate(Score = sum(c_across(starts_with("epi_score"))),
-               Week = w) %>%
-        ungroup() %>%
-        select(Contestant, Week, Score)
-    })
-    
-    trajectory_data <- bind_rows(all_weeks)
+    trajectory_data <- compute_trajectory(currentweek)
     
     # Create a vibrant, distinguishable color palette
     n_contestants <- length(unique(trajectory_data$Contestant))
@@ -1761,18 +1813,7 @@ server <- function(input, output, session) {
       contestants_to_compare <- c(contestants_to_compare, input$contestant3)
     }
     
-    # Calculate weekly scores for selected contestants
-    all_weeks <- lapply(1:currentweek, function(w) {
-      l <- lapply(1:w, weekly_score, x = picks)
-      reduce(l, left_join) %>%
-        rowwise() %>%
-        mutate(Score = sum(c_across(starts_with("epi_score"))),
-               Week = w) %>%
-        ungroup() %>%
-        select(Contestant, Week, Score)
-    })
-    
-    trajectory_data <- bind_rows(all_weeks) %>%
+    trajectory_data <- compute_trajectory(currentweek) %>%
       filter(Contestant %in% contestants_to_compare)
     
     # Assign colors
