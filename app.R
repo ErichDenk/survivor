@@ -17,7 +17,7 @@ library(ggiraph) # For interactive plots
 
 # ---- Google Sheet Info ----
 gs4_deauth()
-sheet_id <- "1WFD5SAMUbJO40HbMj3TtjDCWgVbdxw0ftDgmVbhHIb4"
+sheet_id <- "1VMGotkWW7dIZlbmwMPpP0AD486lBHc1gVrhPmNSCMDY"
 
 # ---- Read Sheets (must exist in your Google Sheet) ----
 # Expect sheets named: "Tribes", "Picks", "Eliminated", "Finale", "Idols"
