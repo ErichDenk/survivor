@@ -860,9 +860,15 @@ ui <- dashboardPage(
                     width = 12)
               ),
               fluidRow(
-                box(girafeOutput("RiskReward", height = "400px"), 
+                box(girafeOutput("RiskReward", height = "400px"),
                     title = "Risk/Reward Matrix",
                     subtitle = "Value picks (top-left) vs Consensus busts (bottom-right)",
+                    width = 12)
+              ),
+              fluidRow(
+                box(girafeOutput("PopularPicks", height = "500px"),
+                    title = "Most Popular Picks",
+                    subtitle = "How many teams selected each castaway, split by MVP vs. regular pick",
                     width = 12)
               )
       ),
@@ -1406,6 +1412,95 @@ server <- function(input, output, session) {
     )
   })
   
+  # ---- Popular Picks Plot ----
+  output$PopularPicks <- renderGirafe({
+    # Mix a hex color toward white by `amount` (0 = unchanged, 1 = white)
+    lighten_hex <- function(hex, amount = 0.55) {
+      m <- col2rgb(hex) / 255
+      m <- m + (1 - m) * amount
+      rgb(m[1, ], m[2, ], m[3, ])
+    }
+
+    tribe_lookup <- tribes %>% select(cast, tribe, color) %>% distinct()
+
+    # Build fill color map: full tribe color for MVP, lightened for regular picks
+    fill_map <- tribe_lookup %>%
+      select(tribe, color) %>%
+      distinct() %>%
+      mutate(
+        MVP           = color,
+        `Regular Pick` = map_chr(color, ~lighten_hex(.x, 0.55))
+      ) %>%
+      pivot_longer(c(MVP, `Regular Pick`),
+                   names_to = "pick_label", values_to = "fill_hex") %>%
+      mutate(fill_key = paste(tribe, pick_label, sep = "___")) %>%
+      select(fill_key, fill_hex) %>%
+      deframe()
+
+    n_players <- nrow(picks)
+
+    pop_data <- picks %>%
+      pivot_longer(cols = c(MVP, starts_with("Pick")),
+                   values_to = "cast",
+                   names_to = "pick_type") %>%
+      mutate(pick_label = if_else(pick_type == "MVP", "MVP", "Regular Pick")) %>%
+      group_by(cast, pick_label) %>%
+      summarize(count = n(), .groups = "drop") %>%
+      left_join(tribe_lookup, by = "cast") %>%
+      group_by(cast) %>%
+      mutate(
+        total   = sum(count),
+        pct_lbl = paste0(round(total / n_players * 100), "%")
+      ) %>%
+      ungroup() %>%
+      mutate(
+        cast     = reorder(cast, total),
+        fill_key = paste(tribe, pick_label, sep = "___")
+      )
+
+    # One label row per castaway (avoid duplicating across pick_label rows)
+    bar_labels <- pop_data %>%
+      distinct(cast, total, pct_lbl)
+
+    p <- ggplot(pop_data,
+                aes(x = cast, y = count, fill = fill_key)) +
+      geom_col_interactive(
+        aes(tooltip = paste0(cast, "\n",
+                             pick_label, ": ", count, " team(s)\n",
+                             "Total picks: ", total, " (", pct_lbl, ")"),
+            data_id = cast),
+        position = "stack"
+      ) +
+      geom_text(
+        data = bar_labels,
+        aes(x = cast, y = total, label = pct_lbl),
+        inherit.aes = FALSE,
+        hjust = -0.15,
+        size  = 3,
+        color = "#495057"
+      ) +
+      scale_fill_manual(values = fill_map, guide = "none") +
+      coord_flip(clip = "off") +
+      scale_y_continuous(
+        breaks = scales::breaks_pretty(),
+        expand = expansion(mult = c(0, 0.12))
+      ) +
+      mytheme() +
+      theme(axis.text.y = element_text(size = 10))
+
+    girafe(
+      ggobj = p,
+      options = list(
+        opts_hover(css = "opacity:1;stroke-width:1.5;stroke:black;cursor:pointer;"),
+        opts_hover_inv(css = "opacity:0.2;"),
+        opts_sizing(rescale = TRUE),
+        opts_toolbar(saveaspng = FALSE)
+      ),
+      width_svg = 8,
+      height_svg = 7
+    )
+  })
+
   # ---- Pick Performance Dashboard Logic ----
   
   # Calculate pick performance data
