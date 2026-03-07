@@ -908,11 +908,6 @@ ui <- dashboardPage(
                   title = "Points Contribution by Castaway",
                   width = 6,
                   plotOutput("pick_contribution_plot")
-                ),
-                box(
-                  title = "MVP vs Regular Pick Performance",
-                  width = 6,
-                  plotOutput("mvp_comparison_plot")
                 )
               )
       ),
@@ -1679,46 +1674,6 @@ server <- function(input, output, session) {
       labs(y = "Total Points Generated", x = "") +
       mytheme() +
       theme(legend.position = "bottom")
-  })
-  
-  # MVP vs Regular pick comparison
-  output$mvp_comparison_plot <- renderPlot({
-    data <- pick_performance_data() %>%
-      filter(times_picked > 0)
-    
-    if(nrow(data) == 0) return(NULL)
-    
-    # Create separate rows for MVP and Regular picks
-    mvp_data <- data %>%
-      filter(times_mvp > 0) %>%
-      mutate(
-        pick_type = "As MVP",
-        avg_points = total_points / times_mvp  # Average when picked as MVP
-      ) %>%
-      select(cast, pick_type, avg_points)
-    
-    regular_data <- data %>%
-      filter(times_regular > 0) %>%
-      mutate(
-        pick_type = "As Regular Pick",
-        # Calculate average for regular picks only
-        avg_points = (total_weekly / times_picked) * (times_regular / times_picked)
-      ) %>%
-      select(cast, pick_type, avg_points)
-    
-    plot_data <- bind_rows(mvp_data, regular_data) %>%
-      filter(avg_points > 0)
-    
-    if(nrow(plot_data) == 0) return(NULL)
-    
-    ggplot(plot_data, aes(x = reorder(cast, avg_points), y = avg_points, fill = pick_type)) +
-      geom_bar(stat = "identity", position = "dodge", alpha = 0.85) +
-      scale_fill_manual(values = c("As MVP" = "#f59e0b", "As Regular Pick" = "#2563eb")) +
-      coord_flip() +
-      labs(y = "Average Points per Team", x = "") +
-      mytheme() +
-      theme(legend.position = "bottom",
-            legend.title = element_blank())
   })
   
   # ---- Head-to-Head Comparison Logic ----
