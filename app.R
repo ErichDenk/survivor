@@ -1207,8 +1207,9 @@ server <- function(input, output, session) {
       if (is.null(df) || nrow(df) == 0 || !any(df$Place == 1)) {
         valueBox("—", "No leader", icon = icon("crown"), color = "aqua")
       } else {
-        row <- df %>% filter(Place == 1) %>% slice(1)
-        valueBox(row$Contestant, paste0(row$Score, " points"),
+        rows <- df %>% filter(Place == 1)
+        label <- if (nrow(rows) > 1) paste0(nrow(rows), "-way tie") else rows$Contestant[1]
+        valueBox(label, paste0(rows$Score[1], " points"),
                  icon = icon("crown"), color = "yellow")
       }
     }, error = function(e) {
@@ -1223,8 +1224,9 @@ server <- function(input, output, session) {
       if (is.null(df) || nrow(df) == 0 || !any(df$Place == 2)) {
         valueBox("—", "No runner-up", icon = icon("medal"), color = "aqua")
       } else {
-        row <- df %>% filter(Place == 2) %>% slice(1)
-        valueBox(row$Contestant, paste0(row$Score, " points"),
+        rows <- df %>% filter(Place == 2)
+        label <- if (nrow(rows) > 1) paste0(nrow(rows), "-way tie") else rows$Contestant[1]
+        valueBox(label, paste0(rows$Score[1], " points"),
                  icon = icon("medal"), color = "light-blue")
       }
     }, error = function(e) {
@@ -1238,8 +1240,9 @@ server <- function(input, output, session) {
       if (is.null(df) || nrow(df) == 0 || !any(df$Place == 3)) {
         valueBox("—", "No 3rd", icon = icon("medal"), color = "aqua")
       } else {
-        row <- df %>% filter(Place == 3) %>% slice(1)
-        valueBox(row$Contestant, paste0(row$Score, " points"),
+        rows <- df %>% filter(Place == 3)
+        label <- if (nrow(rows) > 1) paste0(nrow(rows), "-way tie") else rows$Contestant[1]
+        valueBox(label, paste0(rows$Score[1], " points"),
                  icon = icon("medal"), color = "orange")
       }
     }, error = function(e) {
