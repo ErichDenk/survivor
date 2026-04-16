@@ -179,7 +179,7 @@ mytheme <- function(){
 }
 
 # ---- Globals ----
-mergeweek <- 6
+mergeweek <- 7
 currentweek <- if(nrow(eliminated) > 0 && any(!is.na(eliminated$week))) {
   max(eliminated$week, na.rm = TRUE)
 } else {
